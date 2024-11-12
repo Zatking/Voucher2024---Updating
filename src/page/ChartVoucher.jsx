@@ -1,25 +1,112 @@
-  import { memo, useState, useEffect } from 'react';
-  import { Line } from 'react-chartjs-2'; // Giữ nguyên Line
-  import { Chart } from 'chart.js/auto';
+import { memo, useState, useEffect } from "react";
+import { Pie, Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+} from "chart.js";
 
-  const ChartVoucher = () => {
-    const [selectedMonth, setSelectedMonth] = useState(''); // Lưu tháng được chọn
-    const [selectedYear, setSelectedYear] = useState('');   // Lưu năm được chọn
-    const [history, setHistory] = useState(null);
-    const [error, setError] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [voucherStatistics, setVoucherStatistics] = useState({});
-    const [filteredData, setFilteredData] = useState([]);
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title
+);
 
+const ChartVoucher = () => {
+  const [history, setHistory] = useState([]);
+  const [error, setError] = useState(null);
+  const [service, setService] = useState([]);
+  const [year, setYear] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedService, setSelectedService] = useState("");
+  const [filteredData, setFilteredData] = useState([]);
+  const [noDataFound, setNoDataFound] = useState(false);
+  const [voucherStatistics, setVoucherStatistics] = useState({});
+  const [noFilterData, setNoFilterData] = useState(false);
+  const [colors, setColors] = useState([]);
+  const [showPopup, setShowPopup] = useState(false);
+  const [filterDetail, setFilterDetail] = useState([]);
+
+  const generateRandomColor = () => {
+    const r = Math.floor(Math.random() * 256);
+    const g = Math.floor(Math.random() * 256);
+    const b = Math.floor(Math.random() * 256);
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  const Popup = () => {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+        <div className="bg-white p-6 rounded-lg shadow-lg w-3/4 max-w-2xl relative">
+          {/* Nút đóng */}
+          <button
+            className="absolute top-4 right-4 text-xl font-bold text-gray-700"
+            onClick={() => setShowPopup(false)} // Đóng popup khi nhấn nút
+          >
+            &times; {/* Biểu tượng đóng (X) */}
+          </button>
+  
+          <h3 className="text-2xl font-semibold mb-4">Voucher Detail</h3>
+          <table className="w-full table-auto">
+            <thead>
+              <tr>
+                <th className="px-4 py-2 text-left border-b">Voucher ID</th>
+                <th className="px-4 py-2 text-left border-b">Partner ID</th>
+                <th className="px-4 py-2 text-left border-b">Service ID</th>
+                <th className="px-4 py-2 text-left border-b">Discount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filterDetail.map((voucher) => (
+                <tr key={voucher.Voucher_ID}>
+                  <td className="px-4 py-2 border-b">{voucher.Voucher_ID}</td>
+                  <td className="px-4 py-2 border-b">{voucher.Partner_ID}</td>
+                  <td className="px-4 py-2 border-b">{voucher.haveVouchers.map((v) => v.Service_ID).join(", ")}</td>
+                  <td className="px-4 py-2 border-b">{voucher.TotalDiscount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+  
+
+  useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await fetch('https://server-voucher.vercel.app/api/Statistical_Voucher');
+        const res = await fetch(
+          "https://server-voucher.vercel.app/api/Statistical_VoucherAdmin"
+        );
         if (!res.ok) {
-          throw new Error('Failed to fetch data');
+          throw new Error("Failed to fetch data");
         }
         const data = await res.json();
         setHistory(data);
-        console.log(data);
+
+        const serviceIds = data.flatMap((item) =>
+          item.haveVouchers.map((voucher) => voucher.Service_ID)
+        );
+        setService([...new Set(serviceIds)]);
+
+        const uniqueYears = [
+          ...new Set(data.map((item) => new Date(item.Date).getFullYear())),
+        ];
+        setYear(uniqueYears);
       } catch (error) {
         setError(error.message);
       } finally {
@@ -27,145 +114,264 @@
       }
     };
 
-    useEffect(() => {
-      fetchHistory();
-    }, []);
+    fetchHistory();
+  }, []);
 
-    const calculateVoucherStatistics = (history) => {
-      const voucherStats = {};
+  const filterData = () => {
+    if (history.length === 0) return;
 
-      history.forEach(item => {
-        const { Voucher_ID, TotalDiscount } = item;
+    const filtered = history.filter((item) => {
+      const voucherDate = new Date(item.Date);
+      const matchesMonthYear =
+        (!selectedMonth ||
+          voucherDate.getMonth() + 1 === parseInt(selectedMonth)) &&
+        (!selectedYear || voucherDate.getFullYear() === parseInt(selectedYear));
 
-        if (voucherStats[Voucher_ID]) {
-          voucherStats[Voucher_ID].totalValue += TotalDiscount;
-          voucherStats[Voucher_ID].count += 1;
-        } else {
-          voucherStats[Voucher_ID] = {
-            totalValue: TotalDiscount,
-            count: 1,
-          };
-        }
-      });
+      const matchesService =
+        !selectedService ||
+        item.haveVouchers.some(
+          (voucher) => voucher.Service_ID === selectedService
+        );
 
-      return voucherStats;
-    };
-
-    useEffect(() => {
-      if (history) {
-        const stats = calculateVoucherStatistics(history);
-        setVoucherStatistics(stats);
-        console.log(stats);
-      }
-    }, [history]);
-
-    const handleMonthChange = (e) => {
-      selectedMonth(e.target.value);
-    };
-
-    const handleYearChange = (e) => {
-      selectedYear(e.target.value);
-    }
-
-    const filterDataByMonthAndYear = () =>{{
-      if(!selectedMonth || !selectedYear || history.length) return ;
-
-      const filtered = history.filter(item => {
-        const voucherDate = new Date(item.Date);
-        return(
-          voucherDate.getMonth() +1 === parseInt(selectedMonth) &&
-          voucherDate.getFullYear() === parseInt(selectedYear)
-        )
-      })
-      setFilteredData(filtered);
-    }}
-
-    // Khi người dùng nhấn nút tìm kiếm
-    const handleSearch = () => {
-      filterDataByMonthAndYear(); // Lọc dữ liệu dựa vào tháng và năm
-  };
-
-    if (isLoading) {
-      return (
-        <div className="text-center text-4xl translate-y-1/2 h-full font-extrabold">
-          Loading...
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="text-center text-4xl translate-y-1/2 h-full font-extrabold">
-          Error: {error}
-        </div>
-      );
-    }
-
-    if (!history || history.length === 0) return <div>No data available.</div>;
-
-    const uniqueVoucherIDs = new Set();
-    const chartData = {
-      labels: [],
-      datasets: [
-        {
-          label: 'Số lượng Voucher',
-          data: [],
-          backgroundColor: 'rgba(75,192,192,0.4)',
-          borderColor: 'rgba(75,192,192,1)',
-          borderWidth: 1,
-        },
-      ],
-    };
-
-    history.forEach(item => {
-      const { Voucher_ID } = item;
-
-      if (!uniqueVoucherIDs.has(Voucher_ID)) {
-        uniqueVoucherIDs.add(Voucher_ID);
-        chartData.labels.push(Voucher_ID);
-        chartData.datasets[0].data.push(voucherStatistics[Voucher_ID]?.count || 0);
-      }
+      return matchesMonthYear && matchesService;
     });
-
-    const chartOptions = {
-      scales: {
-        y: {
-          beginAtZero: true, // Bắt đầu trục Y từ 0
-        },
-      },
-      maintainAspectRatio: false, // Vô hiệu hóa tỷ lệ cố định, cho phép thay đổi kích thước
-    };
-    
-    return (
-      <div className=' xl:w-full  h-[300px]'> {/* Điều chỉnh kích thước container */}
-      <select value={selectedMonth} onChange={handleMonthChange} >
-        <option value="">Chọn tháng muốn thống kê</option>
-        <option value="1">Tháng 1</option>
-        <option value="2">Tháng 2</option>
-        <option value="3">Tháng 3</option>
-        <option value="4">Tháng 4</option>
-        <option value="5">Tháng 5</option>
-        <option value="6">Tháng 6</option>
-        <option value="7">Tháng 7</option>
-        <option value="8">Tháng 8</option>
-        <option value="9">Tháng 9</option>
-        <option value="10">Tháng 10</option>
-        <option value="11">Tháng 11</option>
-        <option value="12">Tháng 12</option>
-      </select>
-
-      <select  value={selectedYear} onChange={handleYearChange}>
-        <option value=""> Chọn năm</option>
-        <option value="2021">2021</option>
-        <option value="2022">2022</option>
-        <option value="2023">2023</option>
-        <option value="2024">2024</option>
-      </select>
-
-      <button onClick={handleSearch} disabled={!selectedMonth || !selectedYear}> Tìm kiếm</button>
-        <Line data={chartData} options={chartOptions} />
-      </div>
+    setFilteredData(filtered);
+    updateVoucherStatistics(filtered);
+    setNoDataFound(filtered.length === 0);
+    setNoFilterData(
+      filtered.length === 0 &&
+        !selectedMonth &&
+        !selectedYear &&
+        !selectedService
     );
   };
 
-  export default memo(ChartVoucher);
+  const filterDetailData = (voucherId) => {
+    const voucher = history.filter((item) => {
+      const voucherDate = new Date(item.Date);
+      const matchesMonthYear =
+        (!selectedMonth ||
+          voucherDate.getMonth() + 1 === parseInt(selectedMonth)) &&
+        (!selectedYear || voucherDate.getFullYear() === parseInt(selectedYear));
+      const matchVoucherId = item.Voucher_ID === voucherId;
+      return matchesMonthYear && matchVoucherId;
+    });
+    setFilterDetail(voucher);
+    setNoDataFound(voucher.length === 0);
+    setShowPopup(true); // Show the popup when a voucher is selected
+  };
+
+  useEffect(() => {
+    filterData();
+  }, []);
+
+  const updateVoucherStatistics = (filteredData) => {
+    const voucherStats = {};
+
+    filteredData.forEach((item) => {
+      const { Voucher_ID, TotalDiscount } = item;
+      const validTotalDiscount = Number(TotalDiscount) || 0;
+
+      if (!voucherStats[Voucher_ID]) {
+        voucherStats[Voucher_ID] = {
+          totalDiscount: validTotalDiscount,
+          totalUsed: 1,
+          partnerID: item.Partner_ID,
+          serviceIDs: item.haveVouchers.map((v) => v.Service_ID).join(", "),
+          date: new Date(item.Date).toLocaleDateString(),
+        };
+      } else {
+        voucherStats[Voucher_ID].totalDiscount += validTotalDiscount;
+        voucherStats[Voucher_ID].totalUsed += 1;
+      }
+    });
+
+    setVoucherStatistics(voucherStats);
+  };
+
+  const pieData = {
+    labels: Object.keys(voucherStatistics),
+    datasets: [
+      {
+        label: "Total Used",
+        data: Object.values(voucherStatistics).map(
+          (voucher) => voucher.totalUsed
+        ),
+        backgroundColor: [
+          "rgba(255, 99, 132, 0.6)",
+          "rgba(54, 162, 235, 0.6)",
+          "rgba(255, 206, 86, 0.6)",
+          "rgba(75, 192, 192, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(255, 159, 64, 0.6)",
+        ],
+        borderColor: [
+          "rgba(255, 99, 132, 1)",
+          "rgba(54, 162, 235, 1)",
+          "rgba(255, 206, 86, 1)",
+          "rgba(75, 192, 192, 1)",
+          "rgba(153, 102, 255, 1)",
+          "rgba(255, 159, 64, 1)",
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const lineData = {
+    labels: Object.keys(voucherStatistics),
+    datasets: [
+      {
+        label: "Total Discount",
+        data: Object.values(voucherStatistics).map(
+          (voucher) => voucher.totalDiscount
+        ),
+        fill: false,
+        borderColor: "rgba(75, 192, 192, 1)",
+        tension: 0.1,
+      },
+    ],
+  };
+
+  const months = Array.from({ length: 12 }, (_, index) => index + 1);
+
+  if (isLoading) {
+    return (
+      <div className="text-center text-4xl translate-y-1/2 h-full font-extrabold">
+        Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-4xl translate-y-1/2 h-full font-extrabold">
+        Error: {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-[#2F4F4F]">
+      <div className="w-full grid grid-cols-3 p-6 gap-6">
+        <div className="col-span-1">
+          <p className="text-lg font-semibold">Service:</p>
+          <select
+            value={selectedService}
+            onChange={(e) => {
+              setSelectedService(e.target.value);
+              filterData();
+            }}
+            className="w-full"
+          >
+            <option value="">Select Service</option>
+            {service.map((serviceId, index) => (
+              <option key={index} value={serviceId}>
+                {serviceId}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-1">
+          <p className="text-lg font-semibold">Month:</p>
+          <select
+            value={selectedMonth}
+            onChange={(e) => {
+              setSelectedMonth(e.target.value);
+              filterData();
+            }}
+            className="w-full"
+          >
+            <option value="">Select Month</option>
+            {months.map((month) => (
+              <option key={month} value={month}>
+                {month}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-1">
+          <p className="text-lg font-semibold">Year:</p>
+          <select
+            value={selectedYear}
+            onChange={(e) => {
+              setSelectedYear(e.target.value);
+              filterData();
+            }}
+            className="w-full"
+          >
+            <option value="">Select Year</option>
+            {year.map((year, index) => (
+              <option key={index} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {noDataFound && !noFilterData && (
+        <p>Không tìm thấy dữ liệu, vui lòng chọn lại</p>
+      )}
+
+      <div className="grid lg:grid-cols-12">
+        <div className="lg:col-span-4">
+          {filteredData.length > 0 && !noDataFound && !noFilterData && (
+            <div style={{ width: "400px", margin: "50px auto" }}>
+              <Pie data={pieData} />
+            </div>
+          )}
+        </div>
+        <div className="lg:col-span-8">
+          <div className="p-6">
+            {filteredData.length > 0 && (
+              <table className="">
+                <thead>
+                  <tr>
+                    <th>Voucher ID</th>
+                    <th>Partner ID</th>
+                    <th>Service IDs</th>
+                    <th>Total Used</th>
+                    <th>Total Discount</th>
+                    <th>Date</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.keys(voucherStatistics).map((voucherId) => (
+                    <tr key={voucherId}>
+                      <td>{voucherId}</td>
+                      <td>{voucherStatistics[voucherId].partnerID}</td>
+                      <td>{voucherStatistics[voucherId].serviceIDs}</td>
+                      <td>{voucherStatistics[voucherId].totalUsed}</td>
+                      <td>{voucherStatistics[voucherId].totalDiscount}</td>
+                      <td>{voucherStatistics[voucherId].date}</td>
+                      <td>
+                        <button
+                          className="border-2 rounded"
+                          onClick={() => filterDetailData(voucherId)}
+                        >
+                          Xem chi tiết
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          {filteredData.length > 0 && !noDataFound && !noFilterData && (
+            <div className="w-[600px] my-[50px] mx-auto">
+              <Line data={lineData} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Show popup when data is available */}
+      {showPopup && <Popup />}
+    </div>
+  );
+};
+
+export default memo(ChartVoucher);

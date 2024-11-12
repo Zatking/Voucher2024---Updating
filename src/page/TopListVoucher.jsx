@@ -74,7 +74,7 @@ const TopListVoucher = () => {
     const sortedStatistics = Object.entries(voucherStatistics).sort((a, b) => b[1].count - a[1].count);
 
     return (
-        <div>
+        <div> 
             <table className='w-full'>
                 <thead>
                     <tr className='bg-green-400 text-white'>
