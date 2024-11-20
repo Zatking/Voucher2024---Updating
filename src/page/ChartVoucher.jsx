@@ -54,15 +54,6 @@ const ChartVoucher = () => {
   };
 
   const Popup = () => {
-    const [currentPage, setCurrentPage] = useState(1); 
-    const itemsPerPage = 10;
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = filterDetail.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(filterDetail.length / itemsPerPage);
-
-    
-    
     return (
       <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
         <div className="bg-white p-6 rounded-lg shadow-lg w-3/4 max-w-2xl relative">
@@ -124,6 +115,7 @@ const ChartVoucher = () => {
         const uniqueYears = [
           ...new Set(data.map((item) => new Date(item.Date).getFullYear())),
         ];
+        console.log(uniqueYears);
         setYear(uniqueYears);
       } catch (error) {
         setError(error.message);
@@ -153,6 +145,8 @@ const ChartVoucher = () => {
 
       return matchesMonthYear && matchesService;
     });
+
+    
     setFilteredData(filtered);
     updateVoucherStatistics(filtered);
     setNoDataFound(filtered.length === 0);

@@ -143,6 +143,7 @@ const DashBoardPartner = () => {
     });
 
     setFilteredData(filtered);
+    
     updateVoucherStatistics(filtered);
     setNoDataFound(filtered.length === 0);
     setNoFilterData(
@@ -152,6 +153,7 @@ const DashBoardPartner = () => {
         !selectedService
     );
   };
+
 
   useEffect(() => {
     if (!selectedMonth || !selectedYear || !selectedService) {
